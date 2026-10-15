@@ -1,0 +1,2 @@
+# Only needed to build the PDF report (scripts/build_report.py); also needs Edge or Chrome installed.
+markdown>=3.5

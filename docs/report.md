@@ -12,10 +12,7 @@ mode, any tool that changes something shows a preview first (a real diff for edi
 
 **Components:** CLI (prompt_toolkit + Rich) → agentic loop → provider abstraction (LangChain) and tool registry →
 MCP client manager → three MCP servers (filesystem, Context7, my RAG server) plus one native `run_command` tool.
-Diagrams: [planning/02_architecture.md](planning/02_architecture.md) (original),
-[architecture_as_built.md](architecture_as_built.md) (final, with changes),
-[planning/03_state_diagram.md](planning/03_state_diagram.md),
-[planning/04_sequence_diagrams.md](planning/04_sequence_diagrams.md) (4 end-to-end operations).
+All diagrams are in section 2.
 
 ### Requirements coverage
 
@@ -32,11 +29,37 @@ Diagrams: [planning/02_architecture.md](planning/02_architecture.md) (original),
 | Custom RAG MCP server, one-time ingestion | `rag_server/`: `ingest.py` builds a persistent Chroma store once; `server.py` serves it |
 | Advanced RAG technique | Fusion retrieval (NirDiamant/RAG_Techniques), evaluated in `rag_server/evaluate.py` |
 | Streaming CLI with status indicators | live Markdown streaming, thinking indicator, tool spinners, toolbar with model and mode |
-| State and sequence diagrams | `docs/planning/03_state_diagram.md`, `docs/planning/04_sequence_diagrams.md` |
-| LLM comparison | `scripts/compare_models.py` → `docs/evaluation/model_comparison.md` (section 3) |
+| State and sequence diagrams | section 2.3 and 2.4 (sources in `docs/planning/`) |
+| LLM comparison | `scripts/compare_models.py` → `docs/evaluation/model_comparison.md` (section 4) |
 | Optional extension: view and confirm changes before edits | `edit_file` dry run shows the diff before the user approves |
 
-## 2. Design decisions
+## 2. Architecture
+
+### 2.1 Original architecture (planning phase)
+
+Source: [planning/02_architecture.md](planning/02_architecture.md), committed before implementation.
+
+<!-- include: planning/02_architecture.md -->
+
+### 2.2 Architecture as built, and what changed
+
+Source: [architecture_as_built.md](architecture_as_built.md).
+
+<!-- include: architecture_as_built.md -->
+
+### 2.3 State diagram
+
+Source: [planning/03_state_diagram.md](planning/03_state_diagram.md).
+
+<!-- include: planning/03_state_diagram.md -->
+
+### 2.4 Sequence diagrams
+
+Source: [planning/04_sequence_diagrams.md](planning/04_sequence_diagrams.md).
+
+<!-- include: planning/04_sequence_diagrams.md -->
+
+## 3. Design decisions
 
 1. **My own agent loop; LangChain only for models.** LangChain's chat models give one streaming + `bind_tools`
    interface for Ollama and OpenAI-compatible servers. I wrote the loop myself so confirmation, previews,
@@ -55,9 +78,9 @@ Diagrams: [planning/02_architecture.md](planning/02_architecture.md) (original),
 6. **The loop is UI-agnostic.** It reports through callbacks, so the same loop runs the CLI and the headless
    benchmark.
 7. **A workspace snapshot in the system prompt.** A short file tree of the project is included at startup, so the
-   model starts from real paths instead of guessing (see section 3).
+   model starts from real paths instead of guessing (see section 4).
 
-## 3. LLM comparison
+## 4. LLM comparison
 
 Same three tasks, fresh fixture workspace per run, auto mode, all MCP servers connected, scored by **automatic
 checks** (hidden tests, file inspection, tool traces), not by the model's summary. Full table and per-run traces:
@@ -116,7 +139,7 @@ shows up in multi-step work: recovering from errors, picking robust edit strateg
 queries. What separated the two models was less what they knew than whether they noticed a failure and changed
 approach.
 
-## 4. Advanced RAG: fusion retrieval insights
+## 5. Advanced RAG: fusion retrieval insights
 
 32 hand-labelled questions (15 keyword-style naming exact classes, 17 plain-English paraphrases); a hit is a
 chunk from a page that answers the question. Full results: [evaluation/rag_retrieval.md](evaluation/rag_retrieval.md).
@@ -153,7 +176,7 @@ chunk from a page that answers the question. Full results: [evaluation/rag_retri
    the collections API, in one run). Several targeted queries from the agent made up for what a single query misses,
    which suggests multi-query retrieval inside the server would help weaker models.
 
-## 5. Reflection
+## 6. Reflection
 
 **What worked**
 - The MCP abstraction: three very different servers (Node filesystem, remote Context7, my Python RAG server)
@@ -214,9 +237,19 @@ chunk from a page that answers the question. Full results: [evaluation/rag_retri
 
 ```bash
 pip install -r requirements.txt
-python -m rag_server.ingest                              # one-time: build the RAGAS vector store
-python -m rag_server.evaluate                            # section 4 -> docs/evaluation/rag_retrieval.md
-python scripts/compare_models.py -p ollama llamacpp -n 3 # section 3 -> docs/evaluation/model_comparison.md
-python mcp_demo.py --demo                                # walkthrough of all three MCP servers' tools
-forge -w sandbox                                         # interactive agent on the sample project
+
+# one-time: build the RAGAS vector store
+python -m rag_server.ingest
+
+# section 5: retrieval evaluation -> docs/evaluation/rag_retrieval.md
+python -m rag_server.evaluate
+
+# section 4: model comparison -> docs/evaluation/model_comparison.md
+python scripts/compare_models.py -p ollama llamacpp -n 3
+
+# walkthrough of all three MCP servers' tools
+python mcp_demo.py --demo
+
+# interactive agent on the sample project
+forge -w sandbox
 ```

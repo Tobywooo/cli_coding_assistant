@@ -5,14 +5,14 @@ reads and edits your files, runs commands, looks up documentation, and keeps goi
 Every tool call is shown as it happens.
 
 > Planning documents: [docs/planning](docs/planning) · as-built architecture: [docs/architecture_as_built.md](docs/architecture_as_built.md)
-> · evaluation: [docs/evaluation](docs/evaluation) · report draft: [docs/report_draft.md](docs/report_draft.md)
+> · evaluation: [docs/evaluation](docs/evaluation) · report: [docs/report.md](docs/report.md)
 
 ## Features
 - **Agentic loop**: reason → call tools → observe → repeat, with a step budget and recovery from errors
 - **MCP client**: launches every server in `mcp_servers.json` and discovers their tools at runtime
   - filesystem (`@modelcontextprotocol/server-filesystem`), sandboxed to the workspace
   - Context7 (`@upstash/context7-mcp`), current docs for third-party libraries
-  - **Forge RAG server** (`rag_server/`, ours): **fusion retrieval** (BM25 + vector search) over the RAGAS docs
+  - **Forge RAG server** (`rag_server/`, custom): **fusion retrieval** (BM25 + vector search) over the RAGAS docs
 - **Native shell tool**: `run_command` for tests, scripts, git, and so on
 - **Providers**: Ollama (local) and any OpenAI-compatible llama.cpp server, switchable mid-session with `/model`
 - **Confirm or auto mode**: in confirm mode, tools that change things show a preview first (a real **diff** for
@@ -58,6 +58,16 @@ three MCP servers' tools without an LLM.
 ```bash
 python -m rag_server.evaluate                          # fusion vs vector vs BM25 vs RRF -> docs/evaluation/rag_retrieval.md
 python scripts/compare_models.py -p ollama llamacpp -n 3   # same tasks per model -> docs/evaluation/model_comparison.md
+```
+
+## Report
+
+The report source is [docs/report.md](docs/report.md); the PDF ([docs/Forge_Report.pdf](docs/Forge_Report.pdf)) is built
+from it with all diagrams rendered:
+
+```bash
+pip install -r requirements-dev.txt
+python scripts/build_report.py
 ```
 
 ## Project layout
