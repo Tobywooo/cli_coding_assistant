@@ -1,39 +1,65 @@
-# CLI Coding Assistant (working name TBD)
+# Forge
 
-An autonomous command-line coding agent built on LLM tool calling and the Model Context Protocol (MCP).
+**Forge** is an autonomous, MCP-powered coding agent for your terminal. Give it a task in plain English. It
+reads and edits your files, runs commands, looks up documentation, and keeps going until the job is done.
+Every tool call is shown as it happens.
 
-> **Status: milestone 1, MCP integration.** The MCP client layer is working and connects to the
-> **filesystem** server and the **Context7** external-resource server. The agentic loop, LLM providers
-> and the custom RAG server are not built yet. See [docs/milestone1_progress.md](docs/milestone1_progress.md).
+> Status: agent core complete (M2). The custom RAG server (M3) and the evaluation (M4) are in progress.
+> Planning documents: [docs/planning](docs/planning).
+
+## Features
+- **Agentic loop**: reason → call tools → observe → repeat, with a step budget and recovery from errors
+- **MCP client**: launches every server in `mcp_servers.json` and discovers their tools at runtime
+  - filesystem (`@modelcontextprotocol/server-filesystem`), sandboxed to the workspace
+  - Context7 (`@upstash/context7-mcp`), current docs for third-party libraries
+- **Native shell tool**: `run_command` for tests, scripts, git, and so on
+- **Providers**: Ollama (local) and any OpenAI-compatible llama.cpp server, switchable mid-session with `/model`
+- **Confirm or auto mode**: in confirm mode, tools that change things show a preview first (a real **diff** for
+  edits) and ask `[Y]es / [n]o / [a]lways`
+- **Streaming terminal UI**: live Markdown output, a thinking indicator, tool-call and result panels, Ctrl+C to cancel
 
 ## Setup
 
-Requirements: Python 3.11+ and Node.js 18+ (the MCP servers are launched with `npx`).
+Requirements: Python 3.11+, Node.js 18+ (the MCP servers run via `npx`), and [Ollama](https://ollama.com) for local models.
 
 ```bash
 python -m venv .venv
 .venv\Scripts\activate            # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-copy .env.example .env            # optional: add a CONTEXT7_API_KEY for higher rate limits
+pip install -e .                  # optional: adds the `forge` command
+copy .env.example .env            # then fill in the values you need
+ollama pull gemma4:e2b            # or set OLLAMA_MODEL to a model you already have
 ```
 
-## Running the MCP demo
+To use the hosted llama.cpp model, set `LLAMACPP_BASE_URL` (and `LLAMACPP_API_KEY`) in `.env`, then run `/model llamacpp`.
+
+## Usage
 
 ```bash
-python mcp_demo.py --demo         # guided walkthrough, pauses between steps
-python mcp_demo.py                # interactive shell: servers / tools / schema / call / demo
+forge -w path/to/project                 # interactive REPL (or: python -m forge)
+forge -w sandbox --auto "fix the bug in calculator.py and run the tests"   # one-shot task
+forge -p llamacpp                        # choose the provider at startup
 ```
 
-The filesystem server is sandboxed to `./sandbox` by default (`--workspace <dir>` to change it).
-Server stderr is written to `logs/<server>.log` instead of the terminal.
+| Command | |
+|---|---|
+| `/mode [confirm\|auto]` | ask before mutating tools, or run everything |
+| `/model [provider[:model]]` | list providers or switch, e.g. `/model ollama:qwen3:8b` |
+| `/tools [server]`, `/servers` | what the agent can call |
+| `/clear`, `/help`, `/exit` | |
+
+`sandbox/` is a small sample project for trying Forge safely. `python mcp_demo.py --demo` runs the
+milestone-1 MCP walkthrough without an LLM.
 
 ## Project layout
 
 | Path | Purpose |
 |---|---|
-| `mcp_servers.json` | Which MCP servers to launch. Add a server here and its tools load automatically |
-| `assistant/config.py` | Loads the server config, expanding `${VAR}` placeholders from the environment |
-| `assistant/mcp_client.py` | `MCPClientManager`: connects to every server, discovers tools, routes tool calls |
-| `assistant/display.py` | Rich rendering of servers, tools, tool calls and results |
-| `mcp_demo.py` | Milestone 1 demo CLI |
-| `sandbox/` | Small sample codebase the filesystem server is allowed to touch |
+| `forge/cli.py` | REPL, slash commands, streaming output, confirmation prompts |
+| `forge/agent.py` | the agentic loop |
+| `forge/providers.py` | provider abstraction (LangChain chat models) |
+| `forge/tools.py` | tool registry: MCP + native tools, permissions, previews, truncation |
+| `forge/mcp_client.py` | MCP client manager (stdio sessions, tool discovery, routing) |
+| `forge/prompts.py` | system prompt with a workspace snapshot |
+| `mcp_servers.json` | MCP server definitions |
+| `docs/planning/` | plan, architecture, state and sequence diagrams |

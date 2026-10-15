@@ -26,12 +26,12 @@ from rich.prompt import Prompt
 from rich.rule import Rule
 from rich.text import Text
 
-from assistant.config import load_server_configs
-from assistant.display import (
+from forge.config import load_server_configs
+from forge.display import (
     console, render_connection, render_schema, render_servers,
     render_tool_call, render_tool_result, render_tools,
 )
-from assistant.mcp_client import MCPClientManager, ToolInfo
+from forge.mcp_client import MCPClientManager, ToolInfo
 
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "mcp_servers.json"

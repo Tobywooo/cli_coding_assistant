@@ -1,8 +1,8 @@
-"""Rich-based rendering for servers, tools and tool calls.
+"""Rich-based rendering for servers, tools and tool calls (shared by the CLI and mcp_demo.py).
 
 Making every tool call visible (which server, which tool, what arguments,
 what came back, how long it took) is a core requirement, so all of that
-formatting lives here and can be reused by the agent loop later.
+formatting lives here.
 """
 from __future__ import annotations
 
@@ -19,14 +19,21 @@ from .mcp_client import MCPClientManager, ServerConnection, ToolInfo, ToolResult
 
 console = Console()
 
+# Forge brand colours (forge fire: gold -> ember).
+BRAND = "#ff8c42"
+EMBER_GRADIENT = ["#ffd166", "#ffb347", "#ff8c42", "#ff6b35", "#f2542d", "#d63a1f"]
+
 # One accent colour per server so it's obvious at a glance which server a call hit.
-SERVER_COLORS = ["cyan", "magenta", "yellow", "green", "blue"]
+_KNOWN_SERVER_COLORS = {"filesystem": "cyan", "context7": "magenta", "rag": "green", "forge": BRAND}
+_FALLBACK_COLORS = ["yellow", "blue", "bright_magenta", "bright_cyan"]
 _color_cache: dict[str, str] = {}
 
 
 def server_color(server: str) -> str:
+    if server in _KNOWN_SERVER_COLORS:
+        return _KNOWN_SERVER_COLORS[server]
     if server not in _color_cache:
-        _color_cache[server] = SERVER_COLORS[len(_color_cache) % len(SERVER_COLORS)]
+        _color_cache[server] = _FALLBACK_COLORS[len(_color_cache) % len(_FALLBACK_COLORS)]
     return _color_cache[server]
 
 

@@ -2,9 +2,9 @@
 
 Each server is launched as a subprocess and spoken to over stdio using the
 official MCP Python SDK. Tools are discovered at runtime with `list_tools`,
-so nothing about a server's tools is hard-coded here. Later, the agentic
-loop will hand this registry to the LLM and route its tool calls back
-through `call_tool`.
+so nothing about a server's tools is hard-coded here. The tool registry
+(forge/tools.py) wraps these tools for the LLM and routes its tool calls
+back through `call_tool`.
 """
 from __future__ import annotations
 
@@ -33,6 +33,8 @@ class ToolInfo:
     name: str
     description: str
     input_schema: dict[str, Any]
+    # Whether the tool only reads state. Drives the confirmation policy.
+    read_only: bool = False
 
     @property
     def qualified_name(self) -> str:
@@ -66,6 +68,16 @@ class ServerConnection:
     @property
     def connected(self) -> bool:
         return self.session is not None
+
+
+def _is_read_only(tool: Any, cfg: ServerConfig) -> bool:
+    """A tool is read-only if its server is trusted as read-only in the config,
+    or if the server annotates the tool with readOnlyHint=True. Anything
+    unannotated is treated as mutating, the safe default."""
+    if cfg.read_only:
+        return True
+    annotations = getattr(tool, "annotations", None)
+    return bool(annotations and getattr(annotations, "read_only_hint", False))
 
 
 def _describe_exception(exc: BaseException) -> str:
@@ -114,7 +126,7 @@ class MCPClientManager:
             errlog = server_stack.enter_context(
                 open(self.log_dir / f"{cfg.name}.log", "w", encoding="utf-8")
             )
-            params = StdioServerParameters(command=cfg.command, args=cfg.args, env=cfg.env or None)
+            params = StdioServerParameters(command=cfg.command, args=cfg.args, env=cfg.env or None, cwd=cfg.cwd)
             read, write = await server_stack.enter_async_context(stdio_client(params, errlog=errlog))
             session = await server_stack.enter_async_context(ClientSession(read, write))
 
@@ -131,6 +143,7 @@ class MCPClientManager:
                     name=tool.name,
                     description=(tool.description or "").strip(),
                     input_schema=tool.input_schema or {},
+                    read_only=_is_read_only(tool, cfg),
                 )
                 for tool in listed.tools
             ]

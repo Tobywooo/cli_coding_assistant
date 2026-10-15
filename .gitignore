@@ -12,3 +12,4 @@ sandbox/demo/
 
 # RAG data: built locally by `python -m rag_server.ingest`
 rag_server/data/
+*.egg-info/

@@ -1,10 +1,11 @@
 {
-  "_comment": "MCP servers the assistant connects to at startup. ${VAR} placeholders are expanded from the environment (.env); ${WORKSPACE} is the directory the agent is allowed to touch. Set \"enabled\": false to skip a server.",
+  "_comment": "MCP servers Forge connects to at startup. ${VAR} placeholders come from the environment (.env) plus WORKSPACE (the project Forge works on), PROJECT_ROOT and PYTHON (this interpreter). \"read_only\": true marks every tool of a server as safe to run without confirmation. Set \"enabled\": false to skip a server.",
   "servers": {
     "filesystem": {
       "description": "Official MCP filesystem server: read, write, edit and search files inside the workspace",
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-filesystem", "${WORKSPACE}"],
+      "cwd": "${WORKSPACE}",
       "enabled": true
     },
     "context7": {
@@ -12,6 +13,7 @@
       "command": "npx",
       "args": ["-y", "@upstash/context7-mcp"],
       "env": { "CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}" },
+      "read_only": true,
       "enabled": true
     }
   }

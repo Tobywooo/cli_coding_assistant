@@ -1,6 +1,16 @@
-# MCP client SDK (stdio transport to the MCP servers)
-mcp>=2.3
-# Terminal UI: panels, tables, spinners, syntax highlighting
-rich>=15.0
-# Loads API keys from .env
-python-dotenv>=1.0
+# --- MCP client + custom MCP server ---
+mcp>=2.3                 # official MCP Python SDK (stdio client and MCPServer)
+
+# --- LLM provider abstraction ---
+langchain-core>=1.6
+langchain-ollama>=1.1    # local models via Ollama
+langchain-openai>=1.7    # OpenAI-compatible endpoints (llama.cpp server)
+
+# --- CLI ---
+rich>=15.0               # panels, syntax highlighting, live streaming output
+prompt_toolkit>=3.0      # REPL input, history, toolbar, confirmation prompts
+python-dotenv>=1.0       # loads .env
+
+# --- RAG server ---
+chromadb>=1.5            # persistent vector store + built-in ONNX MiniLM embeddings
+rank-bm25>=0.2           # BM25 keyword retrieval for fusion retrieval
