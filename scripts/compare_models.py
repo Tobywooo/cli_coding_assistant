@@ -146,10 +146,16 @@ class HeadlessUI:
         self.tools: list[str] = []
         self.errors = 0
         self.failures: list[str] = []    # "tool: first line of the error", for the failure analysis
+        self.last_text = ""
 
-    def on_llm_start(self, step): pass
+    def on_llm_start(self, step):
+        self.last_text = ""          # keep only the latest response: the final answer
+
     def on_reasoning(self, text): pass
-    def on_text(self, text): pass
+
+    def on_text(self, text):
+        self.last_text += text
+
     def on_llm_end(self): pass
     def on_notice(self, text): print(f"      ! {text}")
     def on_tool_start(self, call): pass
@@ -185,6 +191,7 @@ class RunResult:
     seconds: float
     tool_sequence: list[str] = field(default_factory=list)
     tool_failures: list[str] = field(default_factory=list)
+    final_answer: str = ""          # what the model claimed (compare with the checks)
     error: str | None = None
 
 
@@ -220,7 +227,8 @@ async def run_once(provider: str, model: str | None, task_name: str) -> RunResul
             finished=bool(stats and stats.finished), steps=stats.steps if stats else 0,
             tool_calls=len(ui.tools), failed_tool_calls=ui.errors,
             input_tokens=stats.input_tokens if stats else 0, output_tokens=stats.output_tokens if stats else 0,
-            seconds=round(seconds, 1), tool_sequence=ui.tools, tool_failures=ui.failures, error=error)
+            seconds=round(seconds, 1), tool_sequence=ui.tools, tool_failures=ui.failures,
+            final_answer=ui.last_text.strip()[:1500], error=error)
     finally:
         await manager.close()
         shutil.rmtree(workspace, ignore_errors=True)
