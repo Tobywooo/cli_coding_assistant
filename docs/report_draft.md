@@ -1,6 +1,7 @@
-# Forge: Project Report (draft)
+# Forge: Project Report
 
-> Draft for the PDF report. Every number comes from `docs/evaluation/` (3 runs per model per task, 2026-10-15).
+> Every number in this report comes from `docs/evaluation/` (3 runs per model per task, 2026-10-15) and can be
+> reproduced with the commands in the appendix.
 
 ## 1. System overview
 
@@ -10,18 +11,37 @@ model gives a final answer (or a 25-step budget runs out). Every tool call is sh
 mode, any tool that changes something shows a preview first (a real diff for edits) and asks y / n / always.
 
 **Components:** CLI (prompt_toolkit + Rich) → agentic loop → provider abstraction (LangChain) and tool registry →
-MCP client manager → three MCP servers (filesystem, Context7, our RAG server) plus one native `run_command` tool.
+MCP client manager → three MCP servers (filesystem, Context7, my RAG server) plus one native `run_command` tool.
 Diagrams: [planning/02_architecture.md](planning/02_architecture.md) (original),
 [architecture_as_built.md](architecture_as_built.md) (final, with changes),
 [planning/03_state_diagram.md](planning/03_state_diagram.md),
 [planning/04_sequence_diagrams.md](planning/04_sequence_diagrams.md) (4 end-to-end operations).
 
+### Requirements coverage
+
+| Requirement | Where it lives |
+|---|---|
+| Agentic loop (reason → act → observe → repeat) | `forge/agent.py`: streaming LLM call, tool dispatch, step budget, malformed-call recovery |
+| Tool calling: read/edit/write files, shell, search, retrieval | filesystem MCP tools, native `run_command`, Context7 and RAG tools (`forge/tools.py`) |
+| Confirm vs auto-execute | `/mode confirm\|auto`, `--auto`; confirm mode previews diffs, file contents and commands |
+| Visible tool calls | every call shows server › tool + arguments, then the result, its timing and a preview |
+| Provider abstraction: Ollama + cloud/hosted | `forge/providers.py`: Ollama (gemma4:e2b) and an OpenAI-compatible llama.cpp server (Qwen3.8-27B), switchable with `/model` |
+| MCP client with multiple servers, dynamic tools | `forge/mcp_client.py` + `mcp_servers.json`; tools discovered with `list_tools` at startup |
+| Filesystem server | `@modelcontextprotocol/server-filesystem`, sandboxed to the workspace |
+| External resource server | Context7 (`@upstash/context7-mcp`) |
+| Custom RAG MCP server, one-time ingestion | `rag_server/`: `ingest.py` builds a persistent Chroma store once; `server.py` serves it |
+| Advanced RAG technique | Fusion retrieval (NirDiamant/RAG_Techniques), evaluated in `rag_server/evaluate.py` |
+| Streaming CLI with status indicators | live Markdown streaming, thinking indicator, tool spinners, toolbar with model and mode |
+| State and sequence diagrams | `docs/planning/03_state_diagram.md`, `docs/planning/04_sequence_diagrams.md` |
+| LLM comparison | `scripts/compare_models.py` → `docs/evaluation/model_comparison.md` (section 3) |
+| Optional extension: view and confirm changes before edits | `edit_file` dry run shows the diff before the user approves |
+
 ## 2. Design decisions
 
-1. **Our own agent loop; LangChain only for models.** LangChain's chat models give one streaming + `bind_tools`
-   interface for Ollama and OpenAI-compatible servers. We wrote the loop ourselves so confirmation, previews,
-   cancellation and tool visibility sit exactly where we need them.
-2. **Our own MCP client on the official SDK** (not an adapter library): stdio sessions, `list_tools` discovery,
+1. **My own agent loop; LangChain only for models.** LangChain's chat models give one streaming + `bind_tools`
+   interface for Ollama and OpenAI-compatible servers. I wrote the loop myself so confirmation, previews,
+   cancellation and tool visibility sit exactly where I need them.
+2. **My own MCP client on the official SDK** (not an adapter library): stdio sessions, `list_tools` discovery,
    qualified tool names (`server__tool`), JSON Schema → function-calling schema conversion.
 3. **Servers are configuration.** `mcp_servers.json` defines all three servers; the RAG server was added without
    code changes.
@@ -29,9 +49,13 @@ Diagrams: [planning/02_architecture.md](planning/02_architecture.md) (original),
    are trusted as read-only in the config. `run_command` always counts as mutating.
 5. **RAG: RAGAS docs + fusion retrieval.** 133 pages → 1,585 chunks (Markdown-header split, then 1,200 chars with
    150 overlap), MiniLM ONNX embeddings in a persistent Chroma store built once by `python -m rag_server.ingest`.
-   Fusion = 0.5 × normalised vector score + 0.5 × normalised BM25 score.
+   Fusion = 0.5 × normalised vector score + 0.5 × normalised BM25 score. I chose RAGAS because its API changed
+   recently (legacy vs "collections" metrics), so a model's memory of it is often out of date, which is exactly
+   where retrieval should help.
 6. **The loop is UI-agnostic.** It reports through callbacks, so the same loop runs the CLI and the headless
    benchmark.
+7. **A workspace snapshot in the system prompt.** A short file tree of the project is included at startup, so the
+   model starts from real paths instead of guessing (see section 3).
 
 ## 3. LLM comparison
 
@@ -56,8 +80,10 @@ Failed tool calls per run, averaged over all three tasks: Gemma 2.2, Qwen 0.3. O
   ("Could not find exact match"). It retries, sometimes re-reading the file first, but the replacement text still
   doesn't match, and it stops with its tests still failing. This is why the benchmark scores runs with hidden tests
   instead of trusting the model's own report.
-- Results vary from run to run on the hard task (0/3 vs 2/6 across batches), so we report several runs.
-- The workspace snapshot in the system prompt mattered most: without it, Gemma invented file paths.
+- Results vary from run to run on the hard task (0/3 vs 2/6 across batches), so I report several runs.
+- The workspace snapshot in the system prompt mattered most. In my first end-to-end test, before the snapshot
+  existed, Gemma invented `src/calculator.py` and built the fix there (10 steps). With the snapshot, the same task
+  took 5 steps on the correct file.
 
 **Qwen3.8-27B (hosted on llama.cpp):**
 - **It recovers from its own mistakes; Gemma doesn't.** Qwen hit the same kinds of errors. In one feature run it
@@ -74,9 +100,8 @@ Failed tool calls per run, averaged over all three tasks: Gemma 2.2, Qwen 0.3. O
   two runs. Its code moved toward the current API across runs. Run 1 used the older `LangchainLLMWrapper` +
   `evaluate()` pattern. Run 2 noted that wrapper is deprecated and switched to `llm_factory`, but kept `evaluate()`.
   Run 3 noted that the docs label the `SingleTurnSample` + `ragas.metrics.Faithfulness` pattern as legacy and used
-  the current `ragas.metrics.collections` API. Our checks don't
-  distinguish legacy from current API, so both models score "success" on that task. A stricter check would have
-  separated them.
+  the current `ragas.metrics.collections` API. My checks don't distinguish legacy from current API, so both models
+  score "success" on that task. A stricter check would have separated them.
 - **It interpreted instructions more loosely.** Told "Do not run it" for the RAG script, Qwen still used
   `run_command` in every run, mostly to syntax-check the file with `python -m py_compile`. It never executed the
   script, but it is the model that stretched the instruction. In confirm mode the user would have been asked first.
@@ -112,11 +137,12 @@ chunk from a page that answers the question. Full results: [evaluation/rag_retri
 3. **Paraphrases are the hard part for all methods** (hit@1 0.59 for vector, BM25 and score fusion). Rank-based
    fusion (RRF) did better there (0.71), probably because min-max normalisation lets one very confident method
    dominate the fused score.
-4. **The weight matters.** α = 0.75 scored best (MRR 0.90), but it was tuned on the same 32 questions, so we keep
-   the default α = 0.5 and treat 0.75 as an optimistic upper bound. A held-out question set would be needed to choose α properly.
+4. **The weight matters.** α = 0.75 scored best (MRR 0.90), but it was tuned on the same 32 questions, so I keep
+   the default α = 0.5 and treat 0.75 as an optimistic upper bound. A held-out question set would be needed to
+   choose α properly.
 5. **A bug in the reference implementation.** The NirDiamant notebook adds vector scores (in similarity order)
    to BM25 scores (in corpus order) position by position, so a chunk's vector score can be added to another chunk's
-   BM25 score. Our version keys both scores by chunk id before fusing.
+   BM25 score. My version keys both scores by chunk id before fusing.
 6. **Remaining failures are vocabulary gaps.** "Did the retriever find all the information needed?" misses the
    Context Recall page with every method, because the page talks about "reference claims attributed to the context".
    Query transformation (e.g. HyDE) would be the next technique to try.
@@ -124,51 +150,73 @@ chunk from a page that answers the question. Full results: [evaluation/rag_retri
    "...SingleTurnSample". That correctly returned the docs' *legacy* API section, so the generated script used the
    older API. Retrieval worked, but the model's query steered it. Qwen made 3–5 searches per run. In 2 of 3 runs it
    explicitly identified deprecated or legacy parts of the API from the retrieved docs and replaced them (fully, with
-   the collections API, in one run). Several targeted queries from
-   the agent made up for what a single query misses, which suggests multi-query retrieval inside the server would
-   help weaker models.
+   the collections API, in one run). Several targeted queries from the agent made up for what a single query misses,
+   which suggests multi-query retrieval inside the server would help weaker models.
 
 ## 5. Reflection
 
 **What worked**
-- The MCP abstraction: three very different servers (Node filesystem, remote Context7, our Python RAG server)
+- The MCP abstraction: three very different servers (Node filesystem, remote Context7, my Python RAG server)
   behind one client. Adding the RAG server was a config change.
 - Visible tool calls and diff previews: the confirm-mode diff caught a model replacing `divide()` instead of adding
   a new function.
 - Automatic checks in the benchmark, rather than trusting model summaries.
+- Building the MCP layer first. Milestone 1 surfaced most of the integration surprises before the agent loop
+  depended on them.
 
 **What didn't**
 - Small local models get stuck in retry loops on exact-match edits. Forge recovers (errors go back to the model),
   but the model doesn't always learn from them. Gemma solved 0 of 3 feature runs, while Qwen recovered from the
   same kinds of errors every time.
-- Our first benchmark check was wrong: it required three separate test methods, which the task never asked for, and
-  failed Gemma for it. We fixed the check and reran everything. Automatic grading needs checking too.
+- My first benchmark check was wrong: it required three separate test methods, which the task never asked for, and
+  failed Gemma for it. I fixed the check and reran everything. Automatic grading needs checking too.
 - The RAG task's checks can't tell legacy RAGAS code from current-API code, so they overstate how close the two
   models were on that task.
-- MCP SDK v2 differs from most tutorials (snake_case attributes, FastMCP renamed to MCPServer). We had to read the
-  installed SDK's code.
-- Windows-specific work: `npx.cmd`, console encodings, killing process trees on timeout, Ctrl+C handling.
 
-**What we'd improve**
+**Challenges along the way**
+- **MCP SDK v2 differs from most tutorials:** snake_case attributes (`input_schema`, `is_error`), and FastMCP renamed
+  to `MCPServer`. I worked from the installed SDK's own signatures instead of examples.
+- **Async lifecycle:** the SDK's anyio task groups must be closed by the task that opened them, so servers connect
+  one at a time on a shared exit stack, each with its own stack so a failed server is cleaned up on its own.
+- **Windows specifics:** `npx` is `npx.cmd`; server stderr had to go to log files to keep the UI clean; console
+  encodings needed forcing to UTF-8; timed-out shell commands need `taskkill /T` to kill the whole process tree;
+  and Ctrl+C has to cancel only the running task, not Forge.
+- **Provider quirks:** LangChain's `ChatOpenAI` drops llama.cpp's `reasoning_content`, so a small subclass keeps it
+  for the thinking indicator.
+- **Large tool outputs:** Context7 returns about 4,000 characters per call. Outputs sent back to the model are
+  truncated, keeping the head and tail, because test failures appear at the end.
+
+**What I'd improve**
 - Line-range edits or automatic re-reads after a failed `edit_file`, to break retry loops.
 - Query transformation (HyDE) or a re-ranker in the RAG server, plus a held-out set to tune α.
 - Session persistence and an `/undo` for file edits (optional extensions in the brief).
 - Stricter benchmark checks (e.g. reject deprecated APIs, run the generated RAGAS script against a mock LLM) and
   more runs per task, since the hard task's results varied between batches.
 
-**What we learned from the model comparison**
+**What I learned from the model comparison**
 - Grade agents on outcomes, not their own reports. The benchmark checks the files and runs hidden tests itself.
 - The harness matters as much as the model. The workspace snapshot, error messages returned as observations, and
   the `edit_file` dry run made the small model usable at all. The prompt and tool design are part of the agent.
 - A hybrid setup makes sense: the local model for quick, single-file edits (free and private), the hosted 27B model
   for multi-step tasks. Forge's `/model` command switches mid-conversation to support that.
 
-**Team process**
+**Process**
+- I completed the project individually.
 - Milestone 1 began as an exploratory MCP prototype (filesystem + Context7), presented as a working demo. Doing it
   first exposed the MCP SDK v2 differences early, and it shaped the plan.
-- We then wrote the full plan and the architecture, state and sequence diagrams, and committed them before the
+- I then wrote the full plan and the architecture, state and sequence diagrams, and committed them before the
   milestone code. All later work followed the plan's milestones (M2 agent core → M3 RAG → M4 evaluation), one
   commit per milestone.
-- As the brief encourages, we used an AI coding assistant (Claude Code) throughout. The skill was directing and
-  verifying it: checking claims against the code and data, for example confirming the reference notebook's bug
-  before writing about it, and fixing our own over-strict benchmark check.
+- Working alone, I relied on automatic checks as my second reviewer: the retrieval evaluation and the model
+  benchmark. Every number in this report comes from those scripts, not from reading model output by eye.
+
+## Appendix: reproducing the results
+
+```bash
+pip install -r requirements.txt
+python -m rag_server.ingest                              # one-time: build the RAGAS vector store
+python -m rag_server.evaluate                            # section 4 -> docs/evaluation/rag_retrieval.md
+python scripts/compare_models.py -p ollama llamacpp -n 3 # section 3 -> docs/evaluation/model_comparison.md
+python mcp_demo.py --demo                                # walkthrough of all three MCP servers' tools
+forge -w sandbox                                         # interactive agent on the sample project
+```

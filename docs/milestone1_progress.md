@@ -36,7 +36,7 @@
 ## Next steps
 
 1. **Provider abstraction**: one interface over Ollama (local, e.g. `gemma4:e2b`) and a hosted, OpenAI-compatible
-   endpoint (our team has a llama.cpp server running Qwen3.8-27B). Check that the self-hosted endpoint counts
+   endpoint (I have a llama.cpp server running Qwen3.8-27B). Check that the self-hosted endpoint counts
    as the required cloud provider, or add Groq or OpenAI as well.
 2. **Agentic loop**: send the task and the MCP tool schemas to the LLM, run the tool calls it returns through
    `MCPClientManager.call_tool`, feed the results back, and repeat until the model gives a final answer.
