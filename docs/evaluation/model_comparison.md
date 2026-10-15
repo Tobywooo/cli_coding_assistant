@@ -8,8 +8,11 @@ Averages are per run.
 
 | Task | Provider · model | Runs | Success | Checks passed | Steps | Tool calls (failed) | Tokens in / out | Time (s) |
 |---|---|---|---|---|---|---|---|---|
+| bugfix | llamacpp · qwen3.8-27b | 3 | 3/3 | 15/15 | 4.7 | 4.0 (0.0) | 20,588 / 679 | 13.1 |
 | bugfix | ollama · gemma4:e2b | 3 | 3/3 | 15/15 | 5.0 | 4.0 (0.0) | 19,278 / 1,069 | 11.4 |
+| feature | llamacpp · qwen3.8-27b | 3 | 3/3 | 12/12 | 6.7 | 7.0 (0.7) | 34,011 / 6,797 | 101.6 |
 | feature | ollama · gemma4:e2b | 3 | 0/3 | 6/12 | 11.3 | 10.3 (6.7) | 57,015 / 6,832 | 66.1 |
+| rag_codegen | llamacpp · qwen3.8-27b | 3 | 3/3 | 15/15 | 5.7 | 7.0 (0.3) | 46,315 / 2,070 | 46.0 |
 | rag_codegen | ollama · gemma4:e2b | 3 | 3/3 | 15/15 | 3.0 | 2.0 (0.0) | 12,873 / 1,296 | 13.4 |
 
 ## Tasks and checks
@@ -51,4 +54,25 @@ test file · the model's tests pass · the model ran the tests itself.
 - **feature** · ollama · gemma4:e2b · 2026-10-15T12:37:21: ❌ failed: hidden tests pass, its tests pass  
   `read_text_file → edit_file → create_directory → write_file → run_command → read_text_file → edit_file → run_command → edit_file → run_command`  
   ↳ edit_file: Could not find exact match for edit:  
+  ↳ run_command: exit code: 1
+- **bugfix** · llamacpp · qwen3.8-27b · 2026-10-15T13:39:12: ✅ success  
+  `read_file → edit_file → write_file → run_command`
+- **bugfix** · llamacpp · qwen3.8-27b · 2026-10-15T13:39:31: ✅ success  
+  `read_file → edit_file → write_file → run_command`
+- **bugfix** · llamacpp · qwen3.8-27b · 2026-10-15T13:39:47: ✅ success  
+  `read_file → edit_file → write_file → run_command`
+- **rag_codegen** · llamacpp · qwen3.8-27b · 2026-10-15T13:40:01: ✅ success  
+  `search_ragas_docs → search_ragas_docs → search_ragas_docs → write_file → run_command`
+- **rag_codegen** · llamacpp · qwen3.8-27b · 2026-10-15T13:40:36: ✅ success  
+  `search_ragas_docs → ragas_docs_info → search_ragas_docs → search_ragas_docs → search_ragas_docs → search_ragas_docs → write_file → run_command`
+- **rag_codegen** · llamacpp · qwen3.8-27b · 2026-10-15T13:41:39: ✅ success  
+  `search_ragas_docs → ragas_docs_info → search_ragas_docs → search_ragas_docs → search_ragas_docs → run_command → write_file → run_command`  
+  ↳ run_command: exit code: 1
+- **feature** · llamacpp · qwen3.8-27b · 2026-10-15T13:42:27: ✅ success  
+  `read_file → write_file → write_file → create_directory → write_file → run_command`  
+  ↳ write_file: ENOENT: no such file or directory, open 'C:\Users\tobia\AppData\Local\Temp\forge_bench_feature_77sp0jrx\tests\test_strings.py'
+- **feature** · llamacpp · qwen3.8-27b · 2026-10-15T13:43:34: ✅ success  
+  `read_file → create_directory → write_file → write_file → write_file → run_command`
+- **feature** · llamacpp · qwen3.8-27b · 2026-10-15T13:46:03: ✅ success  
+  `read_file → list_directory → write_file → create_directory → write_file → edit_file → run_command → edit_file → run_command`  
   ↳ run_command: exit code: 1

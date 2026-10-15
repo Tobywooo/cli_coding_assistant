@@ -1,7 +1,6 @@
 # Forge: Project Report (draft)
 
-> Draft for the PDF report. Every number comes from `docs/evaluation/`. Sections marked **TODO (team)**
-> need the llama.cpp results or the team's own reflections before submission.
+> Draft for the PDF report. Every number comes from `docs/evaluation/` (3 runs per model per task, 2026-10-15).
 
 ## 1. System overview
 
@@ -42,14 +41,14 @@ checks** (hidden tests, file inspection, tool traces), not by the model's summar
 
 | Task | gemma4:e2b (Ollama, local) | Qwen3.8-27B (llama.cpp) |
 |---|---|---|
-| bugfix: fix divide-by-zero, write and run tests | 3/3 success · 5 steps · 11 s | **TODO (team)** |
-| rag_codegen: RAGAS Faithfulness script from docs | 3/3 success · 3 steps · 13 s | **TODO (team)** |
-| feature: stricter slugify, tests in new tests/ folder | 0/3 in the recorded batch (2/6 in two earlier batches) · ~11 steps · 66 s | **TODO (team)** |
+| bugfix: fix divide-by-zero, write and run tests | 3/3 success · 5.0 steps · 11 s · 19k tokens in | 3/3 success · 4.7 steps · 13 s · 21k tokens in |
+| rag_codegen: RAGAS Faithfulness script from docs | 3/3 success · 3.0 steps · 13 s · 13k tokens in | 3/3 success · 5.7 steps · 46 s · 46k tokens in |
+| feature: stricter slugify, tests in new tests/ folder | **0/3** (2/6 in two earlier batches) · 11.3 steps · 66 s · 57k tokens in | **3/3** · 6.7 steps · 102 s · 34k tokens in |
+| **Total** | **6/9** | **9/9** |
 
-To fill in the Qwen column: set `LLAMACPP_BASE_URL` / `LLAMACPP_API_KEY` in `.env`, then run
-`python scripts/compare_models.py -p llamacpp -n 3`.
+Failed tool calls per run, averaged over all three tasks: Gemma 2.2, Qwen 0.3. On the feature task alone: Gemma 6.7, Qwen 0.7.
 
-**Observations so far (Gemma 4 E2B):**
+**Gemma 4 E2B (local, about 2B parameters):**
 - It reliably handles short, single-file tasks and uses tools correctly: it reads before editing, creates
   folders before writing, and runs the tests itself.
 - **The typical failure is getting stuck in edit_file retries.** On the feature task, the first edit works, but
@@ -60,8 +59,37 @@ To fill in the Qwen column: set `LLAMACPP_BASE_URL` / `LLAMACPP_API_KEY` in `.en
 - Results vary from run to run on the hard task (0/3 vs 2/6 across batches), so we report several runs.
 - The workspace snapshot in the system prompt mattered most: without it, Gemma invented file paths.
 
-**TODO (team):** add the Qwen observations, e.g. success rate, whether it re-reads files after failed edits,
-speed and token use versus Gemma, and the quality of the final summaries.
+**Qwen3.8-27B (hosted on llama.cpp):**
+- **It recovers from its own mistakes; Gemma doesn't.** Qwen hit the same kinds of errors. In one feature run it
+  wrote `tests/test_strings.py` before creating the folder (`ENOENT`, the same `write_file` quirk). In another, its
+  first test run failed. Both times it fixed the cause (created the folder, edited the code) and reran until the
+  tests passed. Gemma, in the same situation, repeated `edit_file` calls that no longer matched the file.
+- **It chose a safer editing strategy.** In all three feature runs Qwen rewrote `utils/strings.py` with
+  `write_file` instead of patching it with exact-match `edit_file` calls. That avoids the failure mode that sank
+  Gemma.
+- **It was more thorough.** Its test suites were larger (6–7 tests for the bug fix, 14–17 for the feature, covering
+  empty input, tabs and idempotency), and its final summaries listed the files changed, the command used to verify,
+  and the test results. The automatic checks confirmed that the tests pass in every run.
+- **It used the RAG server much more.** It made 3–5 searches per run (Gemma made 1) and called `ragas_docs_info` in
+  two runs. Its code moved toward the current API across runs. Run 1 used the older `LangchainLLMWrapper` +
+  `evaluate()` pattern. Run 2 noted that wrapper is deprecated and switched to `llm_factory`, but kept `evaluate()`.
+  Run 3 noted that the docs label the `SingleTurnSample` + `ragas.metrics.Faithfulness` pattern as legacy and used
+  the current `ragas.metrics.collections` API. Our checks don't
+  distinguish legacy from current API, so both models score "success" on that task. A stricter check would have
+  separated them.
+- **It interpreted instructions more loosely.** Told "Do not run it" for the RAG script, Qwen still used
+  `run_command` in every run, mostly to syntax-check the file with `python -m py_compile`. It never executed the
+  script, but it is the model that stretched the instruction. In confirm mode the user would have been asked first.
+- **Thoroughness costs time.** Qwen was about as fast on the bug fix (13 s vs 11 s) but slower on the RAG task (46 s
+  vs 13 s, because of the extra searches) and the feature task (102 s vs 66 s, mostly from writing long test files;
+  one run produced about 10k output tokens). It needed fewer input tokens on the feature task (34k vs 57k) because it
+  didn't spend steps on failed retries. The timings also depend on the hardware each server runs on, so read them
+  as rough.
+
+**Takeaway:** on short single-file tasks the small local model is as good and is fast. The 27B model's advantage
+shows up in multi-step work: recovering from errors, picking robust edit strategies, and making several retrieval
+queries. What separated the two models was less what they knew than whether they noticed a failure and changed
+approach.
 
 ## 4. Advanced RAG: fusion retrieval insights
 
@@ -94,7 +122,11 @@ chunk from a page that answers the question. Full results: [evaluation/rag_retri
    Query transformation (e.g. HyDE) would be the next technique to try.
 7. **Retrieval quality depends on the agent's query.** In the RAG-grounded coding task, Gemma searched for
    "...SingleTurnSample". That correctly returned the docs' *legacy* API section, so the generated script used the
-   older API. Retrieval worked, but the model's query steered it.
+   older API. Retrieval worked, but the model's query steered it. Qwen made 3–5 searches per run. In 2 of 3 runs it
+   explicitly identified deprecated or legacy parts of the API from the retrieved docs and replaced them (fully, with
+   the collections API, in one run). Several targeted queries from
+   the agent made up for what a single query misses, which suggests multi-query retrieval inside the server would
+   help weaker models.
 
 ## 5. Reflection
 
@@ -107,7 +139,12 @@ chunk from a page that answers the question. Full results: [evaluation/rag_retri
 
 **What didn't**
 - Small local models get stuck in retry loops on exact-match edits. Forge recovers (errors go back to the model),
-  but the model doesn't always learn from them.
+  but the model doesn't always learn from them. Gemma solved 0 of 3 feature runs, while Qwen recovered from the
+  same kinds of errors every time.
+- Our first benchmark check was wrong: it required three separate test methods, which the task never asked for, and
+  failed Gemma for it. We fixed the check and reran everything. Automatic grading needs checking too.
+- The RAG task's checks can't tell legacy RAGAS code from current-API code, so they overstate how close the two
+  models were on that task.
 - MCP SDK v2 differs from most tutorials (snake_case attributes, FastMCP renamed to MCPServer). We had to read the
   installed SDK's code.
 - Windows-specific work: `npx.cmd`, console encodings, killing process trees on timeout, Ctrl+C handling.
@@ -116,5 +153,22 @@ chunk from a page that answers the question. Full results: [evaluation/rag_retri
 - Line-range edits or automatic re-reads after a failed `edit_file`, to break retry loops.
 - Query transformation (HyDE) or a re-ranker in the RAG server, plus a held-out set to tune α.
 - Session persistence and an `/undo` for file edits (optional extensions in the brief).
+- Stricter benchmark checks (e.g. reject deprecated APIs, run the generated RAGAS script against a mock LLM) and
+  more runs per task, since the hard task's results varied between batches.
 
-**TODO (team):** personal reflections, team process, and anything you learn from the Qwen runs.
+**What we learned from the model comparison**
+- Grade agents on outcomes, not their own reports. The benchmark checks the files and runs hidden tests itself.
+- The harness matters as much as the model. The workspace snapshot, error messages returned as observations, and
+  the `edit_file` dry run made the small model usable at all. The prompt and tool design are part of the agent.
+- A hybrid setup makes sense: the local model for quick, single-file edits (free and private), the hosted 27B model
+  for multi-step tasks. Forge's `/model` command switches mid-conversation to support that.
+
+**Team process**
+- Milestone 1 began as an exploratory MCP prototype (filesystem + Context7), presented as a working demo. Doing it
+  first exposed the MCP SDK v2 differences early, and it shaped the plan.
+- We then wrote the full plan and the architecture, state and sequence diagrams, and committed them before the
+  milestone code. All later work followed the plan's milestones (M2 agent core → M3 RAG → M4 evaluation), one
+  commit per milestone.
+- As the brief encourages, we used an AI coding assistant (Claude Code) throughout. The skill was directing and
+  verifying it: checking claims against the code and data, for example confirming the reference notebook's bug
+  before writing about it, and fixing our own over-strict benchmark check.
