@@ -14,7 +14,7 @@ dynamic = ["dependencies"]
 forge = "forge.cli:main"
 
 [tool.setuptools]
-packages = ["forge"]
+packages = ["forge", "rag_server"]
 
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }

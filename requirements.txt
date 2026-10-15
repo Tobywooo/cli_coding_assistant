@@ -14,3 +14,4 @@ python-dotenv>=1.0       # loads .env
 # --- RAG server ---
 chromadb>=1.5            # persistent vector store + built-in ONNX MiniLM embeddings
 rank-bm25>=0.2           # BM25 keyword retrieval for fusion retrieval
+langchain-text-splitters>=1.0  # Markdown-header and recursive chunking

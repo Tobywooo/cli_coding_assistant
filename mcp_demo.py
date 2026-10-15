@@ -151,6 +151,20 @@ async def run_demo(manager: MCPClientManager, workspace: Path, pause: bool) -> N
         await run_tool(manager, "query-docs",
                        {"libraryId": library_id, "query": "How do I define a custom tool with the @tool decorator?"},
                        max_lines=40)
+        _pause(pause)
+
+    if "rag" in connected:
+        console.print()
+        console.print(Panel("[bold]Server 3: rag[/]  (custom Forge RAG server, rag_server/server.py)\n"
+                            "Fusion retrieval (BM25 + vectors) over the RAGAS documentation.", border_style="green"))
+        query = "LLMContextPrecisionWithReference example"
+        for method, why in [("vector", "Vector search alone: semantically close, but may miss the exact class."),
+                            ("bm25", "Keyword search alone: matches the identifier, but ignores meaning."),
+                            ("fusion", "Fusion: 0.5 × normalised vector score + 0.5 × normalised BM25 score.")]:
+            step += 1
+            _step(step, f"search_ragas_docs (method={method})", why)
+            await run_tool(manager, "search_ragas_docs", {"query": query, "k": 3, "method": method}, max_lines=25)
+            _pause(pause)
 
     console.print()
     console.print(Panel("[bold green]Demo complete.[/] Every call above went through our MCP client: "
@@ -215,7 +229,7 @@ async def main() -> None:
     workspace = Path(args.workspace).resolve()
     workspace.mkdir(parents=True, exist_ok=True)
 
-    configs = load_server_configs(CONFIG_PATH, {"WORKSPACE": str(workspace)})
+    configs = load_server_configs(CONFIG_PATH, {"WORKSPACE": str(workspace), "PROJECT_ROOT": str(ROOT), "PYTHON": sys.executable})
     if args.servers:
         configs = [c for c in configs if c.name in args.servers]
 

@@ -4,15 +4,35 @@
     "filesystem": {
       "description": "Official MCP filesystem server: read, write, edit and search files inside the workspace",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${WORKSPACE}"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "${WORKSPACE}"
+      ],
       "cwd": "${WORKSPACE}",
       "enabled": true
     },
     "context7": {
       "description": "External resource server: up-to-date library documentation and code examples from Context7",
       "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp"],
-      "env": { "CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}" },
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ],
+      "env": {
+        "CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}"
+      },
+      "read_only": true,
+      "enabled": true
+    },
+    "rag": {
+      "description": "Forge's custom RAG server: fusion retrieval (BM25 + vectors) over the RAGAS documentation",
+      "command": "${PYTHON}",
+      "args": [
+        "-m",
+        "rag_server.server"
+      ],
+      "cwd": "${PROJECT_ROOT}",
       "read_only": true,
       "enabled": true
     }
