@@ -1,0 +1,6 @@
+# MCP client SDK (stdio transport to the MCP servers)
+mcp>=2.3
+# Terminal UI: panels, tables, spinners, syntax highlighting
+rich>=15.0
+# Loads API keys from .env
+python-dotenv>=1.0
